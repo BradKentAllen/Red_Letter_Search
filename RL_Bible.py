@@ -23,6 +23,15 @@ class Red_Letter_Bible():
         self.RedLetterDF = self.get_RedLetters(redline_file)
         self.RedLetterDF_grouped = self.get_RedLetters_grouped(redline_grouped_file)
 
+        self.score_dict = {
+            'full phrase': 20,
+            'entity_PERSON': 5,
+            'entity_GPE': 3,
+            'PROPN': 2,
+            'NOUN': 1,
+            'VERB': 1,
+        }
+
     def reference_parser(self, reference):
         '''returns chapter and verse from reference
         of form -   chapter:verse
@@ -64,7 +73,7 @@ class Red_Letter_Bible():
 
         return redline_groupDF
 
-    def advanced_word_search(self, word_dict, result='', max_results=10):
+    def advanced_word_search(self, phrase, word_dict, result='', max_results=10):
         '''Ranks search results based on words in word list
         Each word must have a ranking integer
         '''
@@ -77,37 +86,54 @@ class Red_Letter_Bible():
 
         for index, row in searchDF.iterrows():
             this_score = 0
-            for word, word_score in word_dict.items():
-                word_return = self.text_util.find_word(row[2], word)
-                if word_return is not None:
-                    this_score = this_score + word_score
 
-            # place in list if greater than at least one
-            if len(results_list) < max_results:
-                # convert pandas series to list
-                _verse = row.tolist()
-                # add score to the list in position 3
-                _verse.append(this_score)
-                # append to results list
-                results_list.append(_verse)
+            # test for full phrase in text
+            find_phrase = self.text_util.find_word(row[2], phrase)
+            if find_phrase is not None:
+                ### found full phrase (returns score)
+                this_score = self.score_dict['full phrase']
+                #add to results list
+                results_list = self.verse_to_list(row, this_score, results_list)
             else:
-                scores_list = [i[3] for i in results_list]
-                lowest_score = min(scores_list)
-                if this_score > lowest_score:
-                    # remove the lowest score
-                    for result in results_list:
-                        if result[3] == lowest_score:
-                            results_list.remove(result)
-                            break
-                    #add current row
-                    # convert pandas series to list
-                    _verse = row.tolist()
-                    # add score to the list in position 3
-                    _verse.append(this_score)
-                    # append to results list
-                    results_list.append(_verse)
+                #### Word Search
+                for word, word_score in word_dict.items():
+                    word_return = self.text_util.find_word(row[2], word)
+                    if word_return is not None:
+                        this_score = this_score + word_score
+
+                # place in list if greater than at least one
+                if len(results_list) < max_results:
+                    # add to results list
+                    results_list = self.verse_to_list(row, this_score, results_list) 
+                else:
+                    scores_list = [i[3] for i in results_list]
+                    lowest_score = min(scores_list)
+                    if this_score > lowest_score:
+                        # remove the lowest score
+                        for result in results_list:
+                            if result[3] == lowest_score:
+                                results_list.remove(result)
+                                break
+                        #add to results list
+                        results_list = self.verse_to_list(row, this_score, results_list)
+                        
 
         return results_list
+
+    def verse_to_list(self, row, this_score, results_list):
+        '''support method for advanced word search
+        Converts DF row (pandas series) to list
+        Adds score as 4th element (position 3)
+        '''
+        # convert pandas series to list
+        _verse = row.tolist()
+        # add score to the list in position 3
+        _verse.append(this_score)
+        # append to results list
+        results_list.append(_verse)
+
+        return results_list
+
 
     def create_scored_dict(self, phrase):
         '''create a list of words for searching
@@ -119,10 +145,10 @@ class Red_Letter_Bible():
         for entity in entities:
             if entity[1] == 'PERSON':
                 if entity[0].text not in search_dict:
-                    search_dict[entity[0].text] = 5
+                    search_dict[entity[0].text] = self.score_dict['entity_PERSON']
             elif entity[1] == 'GPE':
                 if entity[0].text not in search_dict:
-                    search_dict[entity[0].text] = 3
+                    search_dict[entity[0].text] = self.score_dict['entity_GPE']
 
         tokenized = self.NLP.return_sentence_list(phrase, tokenize=True)
         for token_list in tokenized:
@@ -130,13 +156,13 @@ class Red_Letter_Bible():
                 print(token[0], ' - ', token[2])
                 if token[2] == 'PROPN':
                     if token[0].text not in search_dict:
-                        search_dict[token[0].text] = 2
+                        search_dict[token[0].text] = self.score_dict['PROPN']
                 elif token[2] == 'NOUN':
                     if token[0].text not in search_dict:
-                        search_dict[token[0].text] = 1
+                        search_dict[token[0].text] = self.score_dict['NOUN']
                 elif token[2] == 'VERB':
                     if token[0].text not in search_dict:
-                        search_dict[token[0].text] = 1
+                        search_dict[token[0].text] = self.score_dict['VERB']
 
 
         print(json.dumps(search_dict, indent=2))
@@ -194,7 +220,7 @@ if __name__ == '__main__':
         scored_dict = RLapp.create_scored_dict(phrase)
 
         #### advanced search
-        result_list = RLapp.advanced_word_search(scored_dict, result_type)
+        result_list = RLapp.advanced_word_search(phrase, scored_dict, result_type)
 
         for result in result_list:
             print(f'{result[2]} ({result[0]} {result[1]})')

@@ -172,9 +172,9 @@ class Text_Utilities:
         return text.lower()
 
     def find_word(self, text, word):
-        '''Return text if it contains word
+        '''Return text if it contains word or phrase
         Word is not case sensitive
-        Word can be multiple words
+        Word can be multiple words (phrase)
         '''
         _word = self.make_lower_case(word)
         _text = self.make_lower_case(text)
