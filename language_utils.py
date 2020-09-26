@@ -124,7 +124,16 @@ class Nat_Lang_Proc:
         synset = token._.wordnet.synsets()
         return synset
 
+    def get_lemma(self, word):
+        '''Use spaCy to get lemma for a word
+        '''
+        token = self.nlp(word)[0]
+        return token.lemma_
+
+
     def find_lemmas(self, word):
+        '''Use Wordnet to get lemmas for word
+        '''
         token = self.nlp(word)[0]
         lemmas = token._.wordnet.lemmas()
         return lemmas

@@ -1,19 +1,27 @@
 
 from language_utils import Nat_Lang_Proc, Text_Utilities
+from spacy.tokens import Token
 import json
 
-#NLP = Nat_Lang_Proc(spaCy_core='small')
-Text_Util = Text_Utilities()
 
-test_phrase = 'this is the truth'
-test_text = 'this is the whole truth about all of us'
 
-result = Text_Util.find_word(test_text, test_phrase)
+test_word = 'prisoner'
+print('word: ', test_word)
 
-if result is not None:
-    print('found: ', test_phrase)
-else:
-    print('no')
+print('load model')
+NLP = Nat_Lang_Proc(spaCy_core='large')
+# Text_Util = Text_Utilities()
+
+
+token_lemma = NLP.get_lemma(test_word)
+print('lemma: ', token_lemma)
+
+
+similar_list = NLP.get_similar_list(test_word, 5)
+
+print('\nsimilar words: ')
+for word in similar_list:
+    print(word)
 
 
 print('end script')

@@ -83,17 +83,19 @@ class Red_Letter_Bible():
             searchDF = self.RedLetterDF
 
         results_list = []
+        exact_match_list = []
 
         for index, row in searchDF.iterrows():
             this_score = 0
 
-            # test for full phrase in text
+            # test for exact match
             find_phrase = self.text_util.find_word(row[2], phrase)
             if find_phrase is not None:
                 ### found full phrase (returns score)
-                this_score = self.score_dict['full phrase']
-                #add to results list
-                results_list = self.verse_to_list(row, this_score, results_list)
+                # convert pandas series to list
+                _verse = row.tolist()
+                #add to exact match list
+                exact_match_list.append(_verse)
             else:
                 #### Word Search
                 for word, word_score in word_dict.items():
@@ -117,8 +119,9 @@ class Red_Letter_Bible():
                         #add to results list
                         results_list = self.verse_to_list(row, this_score, results_list)
                         
+        results_list = self.organize_by_score(results_list)
 
-        return results_list
+        return exact_match_list, results_list
 
     def verse_to_list(self, row, this_score, results_list):
         '''support method for advanced word search
@@ -130,9 +133,32 @@ class Red_Letter_Bible():
         # add score to the list in position 3
         _verse.append(this_score)
         # append to results list
-        results_list.append(_verse)
+        if _verse[3] > 0:
+            results_list.append(_verse)
 
         return results_list
+
+    def organize_by_score(self, results_list):
+        '''organize list in descending order
+        '''
+        start_flag = True
+        sorted_list = []
+
+        for item in results_list:
+            insert_index = 0
+            if start_flag == True:
+                # add first item to sorted_list
+                sorted_list.append(item)
+                start_flag = False
+            else:
+                # find sorted_item that is greater than
+                for count, sorted_item in enumerate(sorted_list):
+                    if item[3] >= sorted_item[3]:
+                        insert_index = count
+                        break
+                sorted_list.insert(insert_index, item)
+
+        return sorted_list
 
 
     def create_scored_dict(self, phrase):
@@ -163,6 +189,9 @@ class Red_Letter_Bible():
                 elif token[2] == 'VERB':
                     if token[0].text not in search_dict:
                         search_dict[token[0].text] = self.score_dict['VERB']
+                        # add lemma for verb
+                        word_lemma = self.NLP.get_lemma(token[0].text)
+                        search_dict[word_lemma] = self.score_dict['VERB']
 
 
         print(json.dumps(search_dict, indent=2))
@@ -220,11 +249,32 @@ if __name__ == '__main__':
         scored_dict = RLapp.create_scored_dict(phrase)
 
         #### advanced search
-        result_list = RLapp.advanced_word_search(phrase, scored_dict, result_type)
+        exact_match_list, results_list = RLapp.advanced_word_search(phrase, scored_dict, result_type)
 
-        for result in result_list:
-            print(f'{result[2]} ({result[0]} {result[1]})')
-            print('\n')
+        #### if insufficient results, check similarities
+
+
+        #### print results to console
+        print('\nresults for: ', phrase)
+        if len(exact_match_list) == 0:
+            print('No exact matches')
+        elif len(exact_match_list) >= 20:
+            print(len(exact_match_list), ' exact matches')
+            print('narrow search for results')
+        else:
+            print(len(exact_match_list), ' exact matches')
+            print('EXACT MATCHES:')
+            for result in exact_match_list:
+                print(f'{result[2]} ({result[0]} {result[1]})')
+                print('\n')
+
+        if len(results_list) == 0:
+            print('\nno results')
+        else:
+            print('\nResults:')
+            for result in results_list:
+                print(f'score: {result[3]}: {result[2]} ({result[0]} {result[1]})')
+                print('\n')
 
     print('complete')
 
