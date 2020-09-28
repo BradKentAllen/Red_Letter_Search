@@ -6,6 +6,7 @@ Categorize remainder by OT, Paul letters, disciple letters
 
 # Rev 0.0.1 - Dev
 # Rev 0.0.2 - organize list, add verb lemma
+# Rev 0.0.3 - added NOUN and VERB derivative scores, plurals
 
 import pandas as pd
 import json
@@ -189,9 +190,16 @@ class Red_Letter_Bible():
                 elif token[2] == 'NOUN':
                     if token[0].text not in search_dict:
                         search_dict[token[0].text] = self.score_dict['NOUN']
-                        # add potential singular version
-                        _non_plural = token[0].text[:-1]
+                        # add potential singular versions
+                        if token[0].text[-1:] == 's':
+                            # is plural, add singular
+                            _non_plural = token[0].text[:-1]
+                        else:
+                            # is singular add potential plural
+                            _non_plural = token[0].text + 's'
+                        
                         search_dict[_non_plural] = self.score_dict['NOUN derivative']
+
                 elif token[2] == 'VERB':
                     if token[0].text not in search_dict:
                         search_dict[token[0].text] = self.score_dict['VERB']
