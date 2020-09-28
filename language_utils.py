@@ -2,6 +2,7 @@
 
 # rev 0 - DEV
 # rev 0.0.1 - reconfigure classes, filled out methods
+# rev 0.0.2 - add get_lemma using spaCy
 
 
 import re

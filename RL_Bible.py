@@ -5,6 +5,7 @@ Categorize remainder by OT, Paul letters, disciple letters
 '''
 
 # Rev 0.0.1 - Dev
+# Rev 0.0.2 - organize list, add verb lemma
 
 import pandas as pd
 import json
@@ -25,11 +26,13 @@ class Red_Letter_Bible():
 
         self.score_dict = {
             'full phrase': 20,
-            'entity_PERSON': 5,
-            'entity_GPE': 3,
-            'PROPN': 2,
-            'NOUN': 1,
-            'VERB': 1,
+            'entity_PERSON': 8,
+            'entity_GPE': 6,
+            'PROPN': 4,
+            'NOUN': 3,
+            'NOUN derivative': 1,
+            'VERB': 2,
+            'VERB derivative': 1,
         }
 
     def reference_parser(self, reference):
@@ -186,12 +189,15 @@ class Red_Letter_Bible():
                 elif token[2] == 'NOUN':
                     if token[0].text not in search_dict:
                         search_dict[token[0].text] = self.score_dict['NOUN']
+                        # add potential singular version
+                        _non_plural = token[0].text[:-1]
+                        search_dict[_non_plural] = self.score_dict['NOUN derivative']
                 elif token[2] == 'VERB':
                     if token[0].text not in search_dict:
                         search_dict[token[0].text] = self.score_dict['VERB']
                         # add lemma for verb
                         word_lemma = self.NLP.get_lemma(token[0].text)
-                        search_dict[word_lemma] = self.score_dict['VERB']
+                        search_dict[word_lemma] = self.score_dict['VERB derivative']
 
 
         print(json.dumps(search_dict, indent=2))
