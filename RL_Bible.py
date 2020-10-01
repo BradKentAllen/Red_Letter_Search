@@ -7,6 +7,7 @@ Categorize remainder by OT, Paul letters, disciple letters
 # Rev 0.0.1 - Dev
 # Rev 0.0.2 - organize list, add verb lemma
 # Rev 0.0.3 - added NOUN and VERB derivative scores, plurals
+# Rev 0.0.4 - change to word tuple with POS
 
 import pandas as pd
 import json
@@ -29,9 +30,10 @@ class Red_Letter_Bible():
             'full phrase': 20,
             'entity_PERSON': 8,
             'entity_GPE': 6,
-            'PROPN': 4,
-            'NOUN': 3,
-            'NOUN derivative': 1,
+            'entity_LOC': 6,
+            'PROPN': 6,
+            'NOUN': 4,
+            'NOUN derivative': 3,
             'VERB': 2,
             'VERB derivative': 1,
         }
@@ -90,6 +92,10 @@ class Red_Letter_Bible():
         exact_match_list = []
 
         for index, row in searchDF.iterrows():
+            #DEBUG show status
+            if index%100 == 0:
+                print('verse: ', (2000 - index))
+
             this_score = 0
 
             # test for exact match
@@ -101,11 +107,13 @@ class Red_Letter_Bible():
                 #add to exact match list
                 exact_match_list.append(_verse)
             else:
-                #### Word Search
-                for word, word_score in word_dict.items():
-                    word_return = self.text_util.find_word(row[2], word)
-                    if word_return is not None:
-                        this_score = this_score + word_score
+                #### Word and POS Search
+                # get list of word/pos in verse
+                returned_dict = self.NLP.word_pos_search(row[2], word_dict)
+
+                # get total word score for verse
+                if returned_dict is not None:
+                    this_score = sum(returned_dict.values())
 
                 # place in list if greater than at least one
                 if len(results_list) < max_results:
@@ -145,24 +153,11 @@ class Red_Letter_Bible():
     def organize_by_score(self, results_list):
         '''organize list in descending order
         '''
-        start_flag = True
-        sorted_list = []
-
-        for item in results_list:
-            insert_index = 0
-            if start_flag == True:
-                # add first item to sorted_list
-                sorted_list.append(item)
-                start_flag = False
-            else:
-                # find sorted_item that is greater than
-                for count, sorted_item in enumerate(sorted_list):
-                    if item[3] >= sorted_item[3]:
-                        insert_index = count
-                        break
-                sorted_list.insert(insert_index, item)
-
-        return sorted_list
+        print('organize')
+        print(len(results_list))
+        results_list.sort(key = lambda x: x[3], reverse=True)
+        print('sorted: ', len(results_list))
+        return results_list
 
 
     def create_scored_dict(self, phrase):
@@ -171,44 +166,81 @@ class Red_Letter_Bible():
         # dictionary with word and ranking score
         search_dict = {}
 
+        #### Entities
         entities = self.NLP.get_entities(phrase)
-        for entity in entities:
-            if entity[1] == 'PERSON':
-                if entity[0].text not in search_dict:
-                    search_dict[entity[0].text] = self.score_dict['entity_PERSON']
-            elif entity[1] == 'GPE':
-                if entity[0].text not in search_dict:
-                    search_dict[entity[0].text] = self.score_dict['entity_GPE']
+        entities_list = []
 
+        for entity in entities:
+            # create tuple
+            entity_tuple = (entity[0].text, entity[1])
+            if entity[1] == 'PERSON':
+                if entity_tuple not in search_dict:
+                    search_dict[entity_tuple] = self.score_dict['entity_PERSON']
+                    # make list of entity texts for use in replacement
+                    entities_list.append(entity[0].text)
+            elif entity[1] == 'GPE':
+                if entity_tuple not in search_dict:
+                    search_dict[entity_tuple] = self.score_dict['entity_GPE']
+                    # make list of entity texts for use in replacement
+                    entities_list.append(entity[0].text)
+            elif entity[1] == 'LOC':
+                if entity_tuple not in search_dict:
+                    search_dict[entity_tuple] = self.score_dict['entity_LOC']
+                    # make list of entity texts for use in replacement
+                    entities_list.append(entity[0].text)
+
+        ### remove entity from phrase and replace with dummy noun
+        if entities_list != []:
+            for entity in entities_list:
+                phrase = phrase.replace(entity, 'dorkkloo')
+
+        #### Part of Speech POS
         tokenized = self.NLP.return_sentence_list(phrase, tokenize=True)
         for token_list in tokenized:
             for token in token_list:
                 print(token[0], ' - ', token[2])
-                if token[2] == 'PROPN':
-                    if token[0].text not in search_dict:
-                        search_dict[token[0].text] = self.score_dict['PROPN']
-                elif token[2] == 'NOUN':
-                    if token[0].text not in search_dict:
-                        search_dict[token[0].text] = self.score_dict['NOUN']
-                        # add potential singular versions
-                        if token[0].text[-1:] == 's':
-                            # is plural, add singular
-                            _non_plural = token[0].text[:-1]
-                        else:
-                            # is singular add potential plural
-                            _non_plural = token[0].text + 's'
-                        
-                        search_dict[_non_plural] = self.score_dict['NOUN derivative']
+                # ignore placeholders from removed entities
+                if token[0].text != 'dorkkloo':
+                    if token[2] == 'PROPN':
+                        token_tuple = (token[0].text, token[2])
+                        if token_tuple not in search_dict:
+                            search_dict[token_tuple] = self.score_dict['PROPN']
+                    elif token[2] == 'NOUN':
+                        # given version of noun (plural or singular)
+                        token_tuple = (token[0].text, token[2]) 
+                        if token_tuple not in search_dict:
+                            search_dict[token_tuple] = self.score_dict['NOUN']
 
-                elif token[2] == 'VERB':
-                    if token[0].text not in search_dict:
-                        search_dict[token[0].text] = self.score_dict['VERB']
-                        # add lemma for verb
-                        word_lemma = self.NLP.get_lemma(token[0].text)
-                        search_dict[word_lemma] = self.score_dict['VERB derivative']
+                        # check if noun was a plural
+                        if token[0].text != self.NLP.get_lemma(token[0].text):
+                            # add singular version
+                            _word_lemma = self.NLP.get_lemma(token[0].text)
+                            token_tuple_lemma = (_word_lemma.lower(), token[2])
+                            if token_tuple_lemma not in search_dict:
+                                search_dict[token_tuple_lemma] = self.score_dict['NOUN derivative']
 
+                        # add potential plural
+                        if token[0].text[-1:] != 's':
+                            # XXXX this is not great, as it only adds s
+                            token_tuple_plural = ((token[0].text + 's'), token[2])
+                            if token_tuple_plural not in search_dict:
+                                search_dict[token_tuple_plural] = self.score_dict['NOUN derivative']
 
-        print(json.dumps(search_dict, indent=2))
+                    elif token[2] == 'VERB':
+                        token_tuple = (token[0].text, token[2])
+                        if token_tuple not in search_dict:
+                            search_dict[token_tuple] = self.score_dict['VERB']
+
+                        # check for lemma
+                        if token[0].text != self.NLP.get_lemma(token[0].text):
+                            _word_lemma = self.NLP.get_lemma(token[0].text)
+                            token_tuple_lemma = (_word_lemma.lower(), token[2])
+                            if token_tuple_lemma not in search_dict:
+                                search_dict[token_tuple_lemma] = self.score_dict['VERB derivative']
+
+        # print dictionary (json.dumps does not work for tuple keys)
+        for key, value in search_dict.items():
+            print(key, ':', value)
 
         return search_dict
 
@@ -253,6 +285,20 @@ if __name__ == '__main__':
     print('start Red Letter app')
     RLapp = Red_Letter_Bible('small')
 
+    # test one phrase
+    phrase = 'What did Jesus do well at the well'
+    scored_dict = RLapp.create_scored_dict(phrase)
+
+    returned_dict = RLapp.NLP.word_pos_search('He played well at the well', scored_dict)
+
+    # print dictionary (json.dumps does not work for tuple keys)
+    print('\n\nreturned_dict:')
+    for key, value in returned_dict.items():
+        print(key, ':', value)
+
+
+    # full API test
+    '''
     while True:
         result_type = input('grouped for passage or return for single verse: ')
         phrase = input("input phrase (or exit): ")
@@ -289,6 +335,7 @@ if __name__ == '__main__':
             for result in results_list:
                 print(f'score: {result[3]}: {result[2]} ({result[0]} {result[1]})')
                 print('\n')
+    '''
 
     print('complete')
 

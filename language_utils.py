@@ -3,6 +3,7 @@
 # rev 0 - DEV
 # rev 0.0.1 - reconfigure classes, filled out methods
 # rev 0.0.2 - add get_lemma using spaCy
+# rev 0.0.3 - add word_pos_search
 
 
 import re
@@ -34,6 +35,25 @@ class Nat_Lang_Proc:
         # And automatically tag with wordnet domains
         self.token._.wordnet.wordnet_domains()
 
+    #### Search
+    def word_pos_search(self, phrase, search_dict):
+        '''checks for words in search_dict based on
+        part of speech.  Return dictionary with found 
+        words and their pos
+        '''
+        found_word_dict = {}
+        # tokenize the sentence
+        tokenized = self.return_sentence_list(phrase, tokenize=True)
+        for token_list in tokenized:
+            for token in token_list:
+                # check for token and pos, not text is lower
+                token_tuple = (token[0].text.lower(), token[2])
+                if token_tuple in search_dict:
+                    found_word_dict[token_tuple] = search_dict[token_tuple]
+
+        return found_word_dict
+    
+    #### Create Sentences
     def return_sentence_list(self, text, tokenize=False):
         '''returns list of sentences
         Sentences are spacy span objects (spacy.tokens.span.Span)
