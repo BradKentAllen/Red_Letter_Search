@@ -8,11 +8,15 @@ Categorize remainder by OT, Paul letters, disciple letters
 # Rev 0.0.2 - organize list, add verb lemma
 # Rev 0.0.3 - added NOUN and VERB derivative scores, plurals
 # Rev 0.0.4 - change to word tuple with POS
+# Rev 0.0.5 - use pickle file for speed
 
-import pandas as pd
+#import pandas as pd
+import pickle
 import json
 from language_utils import Nat_Lang_Proc
 from language_utils import Text_Utilities
+
+import re
 
 
 class Red_Letter_Bible():
@@ -21,10 +25,14 @@ class Red_Letter_Bible():
         self.text_util = Text_Utilities()
 
         # get red letter DF
-        redline_file = './Bible_texts/RedLetter_text.csv'
-        redline_grouped_file = './Bible_texts/RL_grouped_text.csv'
-        self.RedLetterDF = self.get_RedLetters(redline_file)
-        self.RedLetterDF_grouped = self.get_RedLetters_grouped(redline_grouped_file)
+        pickle_filename = './Bible_texts/RedLetter_text.pkl'
+        with open('RedLetter_text.pkl', 'rb') as file:
+            self.RL_word_list = pickle.load(file)
+
+        #redline_file = './Bible_texts/RedLetter_text.csv'
+        #redline_grouped_file = './Bible_texts/RL_grouped_text.csv'
+        #self.RedLetterDF = self.get_RedLetters(redline_file)
+        #self.RedLetterDF_grouped = self.get_RedLetters_grouped(redline_grouped_file)
 
         self.score_dict = {
             'full phrase': 20,
@@ -36,6 +44,7 @@ class Red_Letter_Bible():
             'NOUN derivative': 3,
             'VERB': 2,
             'VERB derivative': 1,
+            'ADJ': 1,
         }
 
     def reference_parser(self, reference):
@@ -84,33 +93,55 @@ class Red_Letter_Bible():
         Each word must have a ranking integer
         '''
         if result == 'grouped':
-            searchDF = self.RedLetterDF_grouped
+            pass
+            #searchDF = self.RedLetterDF_grouped
         else:
-            searchDF = self.RedLetterDF
+            pass
+            #searchDF = self.RedLetterDF
 
         results_list = []
         exact_match_list = []
 
-        for index, row in searchDF.iterrows():
-            #DEBUG show status
-            if index%100 == 0:
-                print('verse: ', (2000 - index))
-
+        for line in self.RL_word_list:
             this_score = 0
 
             # test for exact match
-            find_phrase = self.text_util.find_word(row[2], phrase)
+            find_phrase = self.text_util.find_word(line[2], phrase)
             if find_phrase is not None:
                 ### found full phrase (returns score)
-                # convert pandas series to list
-                _verse = row.tolist()
+                # record book, ref, passage
+                _verse = [line[0], line[1], line[2]]
                 #add to exact match list
                 exact_match_list.append(_verse)
             else:
                 #### Word and POS Search
-                # get list of word/pos in verse
-                returned_dict = self.NLP.word_pos_search(row[2], word_dict)
+                # SEARCH get list of word/pos in verse
+                returned_dict = {}
 
+                # DEBUG
+                '''
+                _word = 'kingdom'
+                _text = line[2].lower()
+                if re.search(_word, _text):
+                    print(line)
+                '''
+   
+
+                for word_pos in line[3]:
+                    if word_pos in word_dict:
+                        returned_dict[word_pos] = word_dict[word_pos]
+                    # sometimes proper nouns get confused with nouns
+                    elif word_pos[1] == 'NOUN':
+                        temp_word_pos = (word_pos[0],'PROPN')
+                        if temp_word_pos in word_dict:
+                            returned_dict[temp_word_pos] = word_dict[temp_word_pos]
+                    elif word_pos[1] == 'PROPN':
+                        temp_word_pos = (word_pos[0],'NOUN')
+                        if temp_word_pos in word_dict:
+                            returned_dict[temp_word_pos] = word_dict[temp_word_pos]
+
+                # end SEARCh
+         
                 # get total word score for verse
                 if returned_dict is not None:
                     this_score = sum(returned_dict.values())
@@ -118,7 +149,7 @@ class Red_Letter_Bible():
                 # place in list if greater than at least one
                 if len(results_list) < max_results:
                     # add to results list
-                    results_list = self.verse_to_list(row, this_score, results_list) 
+                    results_list = self.verse_to_list(line, this_score, results_list) 
                 else:
                     scores_list = [i[3] for i in results_list]
                     lowest_score = min(scores_list)
@@ -129,19 +160,19 @@ class Red_Letter_Bible():
                                 results_list.remove(result)
                                 break
                         #add to results list
-                        results_list = self.verse_to_list(row, this_score, results_list)
+                        results_list = self.verse_to_list(line, this_score, results_list)
                         
         results_list = self.organize_by_score(results_list)
 
         return exact_match_list, results_list
 
-    def verse_to_list(self, row, this_score, results_list):
+    def verse_to_list(self, line, this_score, results_list):
         '''support method for advanced word search
         Converts DF row (pandas series) to list
         Adds score as 4th element (position 3)
         '''
-        # convert pandas series to list
-        _verse = row.tolist()
+        # record book, ref, passage
+        _verse = [line[0], line[1], line[2]]
         # add score to the list in position 3
         _verse.append(this_score)
         # append to results list
@@ -153,10 +184,7 @@ class Red_Letter_Bible():
     def organize_by_score(self, results_list):
         '''organize list in descending order
         '''
-        print('organize')
-        print(len(results_list))
         results_list.sort(key = lambda x: x[3], reverse=True)
-        print('sorted: ', len(results_list))
         return results_list
 
 
@@ -172,7 +200,7 @@ class Red_Letter_Bible():
 
         for entity in entities:
             # create tuple
-            entity_tuple = (entity[0].text, entity[1])
+            entity_tuple = (entity[0].text.lower(), entity[1])
             if entity[1] == 'PERSON':
                 if entity_tuple not in search_dict:
                     search_dict[entity_tuple] = self.score_dict['entity_PERSON']
@@ -201,13 +229,12 @@ class Red_Letter_Bible():
                 print(token[0], ' - ', token[2])
                 # ignore placeholders from removed entities
                 if token[0].text != 'dorkkloo':
+                    token_tuple = (token[0].text.lower(), token[2])
                     if token[2] == 'PROPN':
-                        token_tuple = (token[0].text, token[2])
                         if token_tuple not in search_dict:
                             search_dict[token_tuple] = self.score_dict['PROPN']
                     elif token[2] == 'NOUN':
                         # given version of noun (plural or singular)
-                        token_tuple = (token[0].text, token[2]) 
                         if token_tuple not in search_dict:
                             search_dict[token_tuple] = self.score_dict['NOUN']
 
@@ -227,7 +254,6 @@ class Red_Letter_Bible():
                                 search_dict[token_tuple_plural] = self.score_dict['NOUN derivative']
 
                     elif token[2] == 'VERB':
-                        token_tuple = (token[0].text, token[2])
                         if token_tuple not in search_dict:
                             search_dict[token_tuple] = self.score_dict['VERB']
 
@@ -237,8 +263,14 @@ class Red_Letter_Bible():
                             token_tuple_lemma = (_word_lemma.lower(), token[2])
                             if token_tuple_lemma not in search_dict:
                                 search_dict[token_tuple_lemma] = self.score_dict['VERB derivative']
+                    
+                    elif token[2] == 'ADJ':
+                        if token_tuple not in search_dict:
+                            search_dict[token_tuple] = self.score_dict['ADJ']
+
 
         # print dictionary (json.dumps does not work for tuple keys)
+        print('\n\nScored Dictionary: ')
         for key, value in search_dict.items():
             print(key, ':', value)
 

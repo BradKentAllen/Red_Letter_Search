@@ -38,7 +38,7 @@ for count, line in enumerate(file_lines):
         for token in token_list:
             if token[0].text not in entities_list:
                 if token[2] not in ['PUNCT', 'SPACE', 'PRON', 'AUX', 'DET', 'CCONJ']:
-                    word_parts = (token[0].text, token[2])
+                    word_parts = (token[0].text.lower(), token[2])
                     pos_list.append(word_parts)
 
     # add to list
